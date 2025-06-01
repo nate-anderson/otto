@@ -257,6 +257,10 @@ func New() *Otto {
 	return o
 }
 
+func (o *Otto) UseLowercaseFields() {
+	o.runtime.lowercaseFields = true
+}
+
 func (o *Otto) clone() *Otto {
 	n := &Otto{
 		runtime: o.runtime.clone(),
