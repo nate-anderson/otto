@@ -769,19 +769,36 @@ func (rt *runtime) toValue(value interface{}) Value {
 					return Value{}
 				case 1:
 					return rt.toValue(out[0].Interface())
-				default:
-					s := make([]interface{}, len(out))
-					for i, v := range out {
-						s[i] = rt.toValue(v.Interface())
+				case 2:
+					errVal := out[1]
+					if errVal.Type().Implements(reflect.TypeFor[error]()) {
+						if !errVal.IsNil() {
+							err := errVal.Interface().(error)
+							if err != nil {
+								jsErr := rt.otto.MakeCustomError("NativeError", err.Error())
+								panic(jsErr)
+							}
+							return rt.toValue(out[0].Interface())
+						}
 					}
-
-					return rt.toValue(s)
+					return rt.wrapMany(out)
+				default:
+					return rt.wrapMany(out)
 				}
 			}))
 		}
 	}
 
 	return toValue(value)
+}
+
+func (rt *runtime) wrapMany(out []reflect.Value) Value {
+	s := make([]interface{}, len(out))
+	for i, v := range out {
+		s[i] = rt.toValue(v.Interface())
+	}
+
+	return rt.toValue(s)
 }
 
 func (rt *runtime) newGoSlice(value reflect.Value) *object {
