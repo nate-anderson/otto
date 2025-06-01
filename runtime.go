@@ -54,18 +54,19 @@ type global struct {
 }
 
 type runtime struct {
-	global       global
-	globalObject *object
-	globalStash  *objectStash
-	scope        *scope
-	otto         *Otto
-	eval         *object
-	debugger     func(*Otto)
-	random       func() float64
-	labels       []string
-	stackLimit   int
-	traceLimit   int
-	lck          sync.Mutex
+	global          global
+	globalObject    *object
+	globalStash     *objectStash
+	scope           *scope
+	otto            *Otto
+	eval            *object
+	debugger        func(*Otto)
+	random          func() float64
+	labels          []string
+	stackLimit      int
+	traceLimit      int
+	lowercaseFields bool
+	lck             sync.Mutex
 }
 
 func (rt *runtime) enterScope(scop *scope) {

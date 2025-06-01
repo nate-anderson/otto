@@ -3,6 +3,7 @@ package otto
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 )
 
 // FIXME Make a note about not being able to modify a struct unless it was
@@ -13,25 +14,76 @@ import (
 // 1. Creating a new struct every time
 // 2. Creating an addressable? struct in the constructor
 
+const (
+	structTag            = "otto"
+	structTagIgnoreValue = "-"
+)
+
 func (rt *runtime) newGoStructObject(value reflect.Value) *object {
 	o := rt.newObject()
 	o.class = classObjectName // TODO Should this be something else?
 	o.objectClass = classGoStruct
-	o.value = newGoStructObject(value)
+	o.value = newGoStructObject(value, rt.lowercaseFields)
 	return o
 }
 
 type goStructObject struct {
 	value reflect.Value
+	// map field and method names from struct tags to real Go names
+	jsNames map[string]string
 }
 
-func newGoStructObject(value reflect.Value) *goStructObject {
+func newGoStructObject(value reflect.Value, lowercaseFields bool) *goStructObject {
 	if reflect.Indirect(value).Kind() != reflect.Struct {
 		dbgf("%/panic//%@: %v != reflect.Struct", value.Kind())
 	}
-	return &goStructObject{
-		value: value,
+	gso := &goStructObject{
+		value:   value,
+		jsNames: make(map[string]string),
 	}
+
+	// map custom and lowercase field names
+	valueT := reflect.Indirect(value).Type()
+	for i := 0; i < valueT.NumField(); i++ {
+		fieldT := valueT.Field(i)
+		if !fieldT.IsExported() {
+			continue
+		}
+
+		if tagValue := fieldT.Tag.Get(structTag); tagValue != "" && tagValue != structTagIgnoreValue {
+			gso.jsNames[tagValue] = fieldT.Name
+			continue
+		}
+
+		// lowercase first letter
+		if lowercaseFields {
+			lowerName := lowerFirst(fieldT.Name)
+			gso.jsNames[lowerName] = fieldT.Name
+		}
+	}
+
+	pointerT := valueT
+	if value.Kind() == reflect.Pointer {
+		pointerT = value.Type()
+	}
+	if lowercaseFields {
+		// map lowercase method names
+		for i := 0; i < pointerT.NumMethod(); i++ {
+			methT := pointerT.Method(i)
+			if !methT.IsExported() {
+				continue
+			}
+
+			lowerName := lowerFirst(methT.Name)
+			gso.jsNames[lowerName] = methT.Name
+		}
+	}
+
+	return gso
+}
+
+func lowerFirst(s string) string {
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func (o goStructObject) getValue(name string) reflect.Value {
@@ -41,6 +93,10 @@ func (o goStructObject) getValue(name string) reflect.Value {
 
 	if validGoStructName(name) {
 		// Do not reveal hidden or unexported fields.
+		if ft, ok := reflect.Indirect(o.value).Type().FieldByName(name); ok && ft.Tag.Get(structTag) == structTagIgnoreValue {
+			return reflect.Value{}
+		}
+
 		if field := reflect.Indirect(o.value).FieldByName(name); field.IsValid() {
 			return field
 		}
@@ -48,6 +104,14 @@ func (o goStructObject) getValue(name string) reflect.Value {
 		if method := o.value.MethodByName(name); method.IsValid() {
 			return method
 		}
+	} else if name != "" {
+		// try mappings
+		mappedName, ok := o.jsNames[name]
+		if !ok {
+			return reflect.Value{}
+		}
+
+		return o.getValue(mappedName)
 	}
 
 	return reflect.Value{}
