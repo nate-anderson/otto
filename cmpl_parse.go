@@ -3,9 +3,9 @@ package otto
 import (
 	"fmt"
 
-	"github.com/robertkrimen/otto/ast"
-	"github.com/robertkrimen/otto/file"
-	"github.com/robertkrimen/otto/token"
+	"github.com/nate-anderson/otto/ast"
+	"github.com/nate-anderson/otto/file"
+	"github.com/nate-anderson/otto/token"
 )
 
 var (

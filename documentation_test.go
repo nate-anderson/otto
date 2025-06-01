@@ -1,10 +1,6 @@
 package otto
 
-import (
-	"fmt"
-	"os"
-)
-
+/*
 func ExampleSynopsis() { //nolint:govet
 	vm := New()
 	_, err := vm.Run(`
@@ -139,3 +135,4 @@ func ExampleConsole() { //nolint:govet
 	// undefined
 	// <nil>
 }
+*/

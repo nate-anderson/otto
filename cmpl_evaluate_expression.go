@@ -5,7 +5,7 @@ import (
 	"math"
 	goruntime "runtime"
 
-	"github.com/robertkrimen/otto/token"
+	"github.com/nate-anderson/otto/token"
 )
 
 func (rt *runtime) cmplEvaluateNodeExpression(node nodeExpression) Value {
