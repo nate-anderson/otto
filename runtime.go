@@ -707,18 +707,25 @@ func (rt *runtime) toValue(value interface{}) Value {
 
 			return objectValue(rt.newNativeFunction(name, file, line, func(c FunctionCall) Value {
 				nargs := typ.NumIn()
+				in := make([]reflect.Value, len(c.ArgumentList))
 
-				if len(c.ArgumentList) != nargs {
-					if typ.IsVariadic() {
-						if len(c.ArgumentList) < nargs-1 {
-							panic(rt.panicRangeError(fmt.Sprintf("expected at least %d arguments; got %d", nargs-1, len(c.ArgumentList))))
+				if typ.IsVariadic() && len(c.ArgumentList) < nargs-1 {
+					if len(c.ArgumentList) < nargs-1 {
+						panic(rt.panicRangeError(fmt.Sprintf("expected at least %d arguments; got %d", nargs-1, len(c.ArgumentList))))
+					}
+				} else if len(c.ArgumentList) < nargs {
+					// allow trailing pointer args to be nil
+					in = make([]reflect.Value, nargs)
+					for i := len(c.ArgumentList); i < nargs; i++ {
+						inT := typ.In(i)
+						if inT.Kind() == reflect.Pointer {
+							empty := reflect.Zero(inT)
+							in[i] = empty
+						} else {
+							panic(rt.panicRangeError(fmt.Sprintf("insufficient arguments passed: trailing argument %d (%s) is not a pointer", i, inT.String())))
 						}
-					} else {
-						panic(rt.panicRangeError(fmt.Sprintf("expected %d argument(s); got %d", nargs, len(c.ArgumentList))))
 					}
 				}
-
-				in := make([]reflect.Value, len(c.ArgumentList))
 
 				callSlice := false
 
@@ -768,20 +775,19 @@ func (rt *runtime) toValue(value interface{}) Value {
 				case 0:
 					return Value{}
 				case 1:
+					maybeErr := out[0]
+					jsErr, ok := rt.jsErrIfErr(maybeErr)
+					if ok {
+						panic(jsErr)
+					}
 					return rt.toValue(out[0].Interface())
 				case 2:
 					errVal := out[1]
-					if errVal.Type().Implements(reflect.TypeFor[error]()) {
-						if !errVal.IsNil() {
-							err := errVal.Interface().(error)
-							if err != nil {
-								jsErr := rt.otto.MakeCustomError("NativeError", err.Error())
-								panic(jsErr)
-							}
-							return rt.toValue(out[0].Interface())
-						}
+					jsErr, ok := rt.jsErrIfErr(errVal)
+					if ok {
+						panic(jsErr)
 					}
-					return rt.wrapMany(out)
+					return rt.toValue(out[0].Interface())
 				default:
 					return rt.wrapMany(out)
 				}
@@ -790,6 +796,19 @@ func (rt *runtime) toValue(value interface{}) Value {
 	}
 
 	return toValue(value)
+}
+
+func (rt *runtime) jsErrIfErr(val reflect.Value) (Value, bool) {
+	if val.Type().Implements(reflect.TypeFor[error]()) {
+		if !val.IsNil() {
+			err := val.Interface().(error)
+			if err != nil {
+				jsErr := rt.otto.MakeCustomError("NaviteError", err.Error())
+				return jsErr, true
+			}
+		}
+	}
+	return UndefinedValue(), false
 }
 
 func (rt *runtime) wrapMany(out []reflect.Value) Value {
